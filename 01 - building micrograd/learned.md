@@ -22,3 +22,7 @@ https://m.blog.naver.com/galaxyenergy/222511035255
 e는 '1에 한없이 가까운 수 자기 자신을 무한히 거듭제곱 한 수'이다.
 
 정의 상 e의 미분값은 e 자기 자신이다.
+
+
+### We can defining new Autograd functions by PYTORCH
+https://docs.pytorch.org/tutorials/beginner/pytorch_with_examples.html#autograd
