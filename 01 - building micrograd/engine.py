@@ -58,17 +58,17 @@ class Value:
         return out
 
 
-    def __rmul__(self,other): # other * self
+    def __rmul__(self, other): # other * self
         return self * other
     
 
-    def __truediv__(self,other): # self / other
+    def __truediv__(self, other): # self / other
         '''나눗셈을 재정의'''
         return self * other** -1
 
 
-    def __pow__(self,other):
-        assert isinstance(other, (int,float)), 'only supporting int/float powers for now'
+    def __pow__(self, other):
+        assert isinstance(other, (int, float)), 'only supporting int/float powers for now'
         out = Value(self.data**other, (self,), f'**{other}')
 
         def _backward():
