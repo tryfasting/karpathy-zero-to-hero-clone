@@ -104,12 +104,12 @@ class Value:
         out = Value(math.exp(x), (self, ), 'exp') # = e ** x
 
         def _backward():
-            self.grad = out.grad * out.data 
+            self.grad += out.grad * out.data 
             # d (backward start point) / d(exp(x)) = d(backward start point) / d out * d out / d exp(x)
             # d(backward start point) / d out = out.grad
             # d out / d exp(x) = e ** x, 
             # 즉, e의 미분은 자기 자신이므로 out.data 유지
-        out._backward += _backward
+        out._backward = _backward
     
         return out
     
