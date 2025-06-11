@@ -88,7 +88,7 @@ class Value:
         out._backward = _backward
         return out
     
-
+ 
     def relu(self):
         out = Value(0 if self.data < 0 else self.data, (self,), 'ReLU')
 
@@ -109,7 +109,7 @@ class Value:
             # d(backward start point) / d out = out.grad
             # d out / d exp(x) = e ** x, 
             # 즉, e의 미분은 자기 자신이므로 out.data 유지
-        out._backward = _backward
+        out._backward += _backward
     
         return out
     
