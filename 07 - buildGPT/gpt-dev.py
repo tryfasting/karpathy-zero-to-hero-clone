@@ -11,7 +11,8 @@ eval_interval = 300
 learning_rate = 1e-2
 device = "cuda" if torch.cuda.is_available() else "cpu"
 eval_iters = 200
-
+n_embd = 32
+# memo : vocab_size : 65
 # ------------
 
 torch.manual_seed(1337)
@@ -80,14 +81,47 @@ def estimate_loss():
 # super simple bigram model
 class BigramLanguageModel(nn.Module):
 
-    def __init__(self, vocab_size):
+    def __init__(self):
         super().__init__()
         # each token directly reads off the logits for the next token from a lookup table
-        self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
+        # nn.Embedding으로 임베딩 테이블을 만든다.
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        # position embedding
+        self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.lm_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, idx, targets=None):
+        B, T = idx.shape
+
         # idx and targets are both (B,T) tensor of integers
-        logits = self.token_embedding_table(idx)  # (B,T,C)
+        # 만들어진 임베딩 테이블에 key를 넣는다.
+        # 왜 nn.Embedding에 __call__이 없을까? -> nn.Module 부모 클래스를 상속받았기 때문이다.
+        """
+        # idx 텐서의 값 (예시)
+        # 2개의 문장, 각 문장은 5개의 단어 번호로 구성
+        idx = tensor([[ 25,  87,   5, 101,  3],   # 1번 문장: "오늘 날씨 정말 좋다 !"
+                      [ 50,  11,  25,  99,  2]])  # 2번 문장: "인공지능 공부 재미있다 ."
+                      
+        self.token_embedding_table(idx)의 핵심 : 치환!
+            idx 텐서에 있는 숫자 하나하나를 위에서 본 임베딩 테이블에서 해당하는 벡터로 그대로 바꿔주는 작업.  
+        
+        예컨대,
+        1. idx[0][0] 값인 25를 본다.
+            - 임베딩 테이블(사전)의 25번 행(페이지)으로 간다.
+            - 거기에 있는 8차원 벡터 [0.7, -0.1, ...]를 통째로 가져온다.
+        2. idx[0][1] 값인 87을 본다.
+            - 임베딩 테이블의 87번 행으로 간다.
+            - 거기에 있는 8차원 벡터 [-0.3, 0.6, ...]를 통째로 가져온다.
+        3. ... 이 과정을 idx 텐서에 있는 모든 숫자(총 2 * 5 = 10개)에 대해 반복한다.
+                      
+        """
+        tok_emb = self.token_embedding_table(idx)  # (B,T,n_embd)
+        """
+        마찬가지로 위치 인덱스 리스트 (T,)를 (T,n_embd) 모양의 위치 벡터 리스트로 변환한 것.
+        """
+        pos_emb = self.position_embedding_table(torch.arange(T, device = device)) # (T,n_embd)
+        x = tok_emb + pos_emb  # (B,T,C)
+        logits = self.lm_head(tok_emb) # (B,T,vocab_size)
         # B : batch size
         # T : Time -> block size
         # C : channel, at this situations, vocab_size
@@ -122,7 +156,7 @@ class BigramLanguageModel(nn.Module):
         return idx
 
 
-model = BigramLanguageModel(vocab_size)
+model = BigramLanguageModel()
 model = model.to(device)
 
 # create a PyTorch optimizer
