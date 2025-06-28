@@ -115,13 +115,13 @@ class BigramLanguageModel(nn.Module):
         3. ... 이 과정을 idx 텐서에 있는 모든 숫자(총 2 * 5 = 10개)에 대해 반복한다.
                       
         """
-        tok_emb = self.token_embedding_table(idx)  # (B,T,n_embd)
+        tok_emb = self.token_embedding_table(idx)  # (B,T,n_embd) == (B,T,C)
         """
         마찬가지로 위치 인덱스 리스트 (T,)를 (T,n_embd) 모양의 위치 벡터 리스트로 변환한 것.
         """
-        pos_emb = self.position_embedding_table(torch.arange(T, device = device)) # (T,n_embd)
+        pos_emb = self.position_embedding_table(torch.arange(T, device = device)) # (T,n_embd) == (T, C)
         x = tok_emb + pos_emb  # (B,T,C)
-        logits = self.lm_head(tok_emb) # (B,T,vocab_size)
+        logits = self.lm_head(x) # (B,T,vocab_size)
         # B : batch size
         # T : Time -> block size
         # C : channel, at this situations, vocab_size
