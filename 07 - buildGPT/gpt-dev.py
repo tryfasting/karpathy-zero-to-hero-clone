@@ -4,14 +4,17 @@ from torch.nn import functional as F
 
 # hyperparameters
 
-batch_size = 32 # how many independent sequences will we process in parallel?
-block_size = 8 # what is maximum context length for predictions?
-max_iters = 3000
-eval_interval = 300
-learning_rate = 1e-2
+batch_size = 64 # how many independent sequences will we process in parallel?
+block_size = 256 # what is maximum context length for predictions?
+max_iters = 5000
+eval_interval = 500
+learning_rate = 3e-4
 device = "cuda" if torch.cuda.is_available() else "cpu"
 eval_iters = 200
-n_embd = 32
+n_embd = 384
+n_head = 6
+n_layer = 6
+dropout = 0.2
 # memo : vocab_size : 65
 # ------------
 
@@ -78,6 +81,85 @@ def estimate_loss():
     return out
 
 
+class Head(nn.Module):
+    """ one head of self-attention """
+
+    def __init__(self, head_size):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias = False)
+        self.query = nn.Linear(n_embd, head_size, bias = False)
+        self.value = nn.Linear(n_embd, head_size, bias = False)
+        """
+        Pytorch의 nn.Module 클래스 내에서 텐서를 다루는 법은 크게 3가지가 있다.  
+        nn.Parameter : 모델이 학습해야 할 가중치, 편향
+        register_buffer : 학습 대상은 아니지만, 모델의 상태로 유지되어야 할 텐서
+        """
+        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        B,T,C = x.shape
+        k = self.key(x)   # (B,T,C)
+        q = self.query(x) # (B,T,C)
+        # compute attention scores ('affinities')
+        wei =  q @ k.transpose(-2, -1) * C ** -0.5 # (B,T,C) @ (B,C,T) -> (B,T,T)
+        wei = wei.masked_fill(self.tril[:T,:T] == 0, float('-inf')) # (B,T,T) # decoder block
+        wei = F.softmax(wei, dim=-1) # (B,T,T)
+        wei = self.dropout(wei)
+        # perform the weighted aggregation of the values
+        v = self.value(x) # (B,T,C)
+        out = wei @ v # (B,T,T) @ (B,T,C) -> (B,T,C)
+        return out
+
+
+class MultiHeadAttention(nn.Module):
+    """multiple heads of self-attention in parallel"""
+
+    def __init__(self, num_heads, head_size):
+        super().__init__()
+        self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+        self.proj = nn.Linear(n_embd, n_embd) # linear transformation of the outcome of this layer
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        out = torch.cat([h(x) for h in self.heads], dim = -1)
+        out = self.proj(out)
+        return out
+
+
+class FeedFoward(nn.Module):
+    """ a simple linear layer followed by a non-linearity"""
+
+    def __init__(self, n_embd):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(n_embd, 4 * n_embd),
+            nn.ReLU(),
+            nn.Linear(4 * n_embd, n_embd), # proj layer going back into the residual pathway
+            nn.Dropout(dropout),
+        )
+
+    def forward(self,x):
+        return self.net(x)
+
+class Block(nn.Module):
+    """Transformer block : communication followed by computation"""
+
+    def __init__(self, n_embd, n_head):
+        # n_embd: embedding dimension, n_head: the number of heads we'd like
+        super().__init__()
+        head_size = n_embd // n_head
+        self.sa = MultiHeadAttention(n_head, head_size)
+        self.ffwd = FeedFoward(n_embd)
+        self.ln1 = nn.LayerNorm(n_embd)
+        self.ln2  = nn.LayerNorm(n_embd)
+
+    def forward(self, x):
+        x = x + self.sa(self.ln1(x))
+        x = x + self.ffwd(self.ln2(x))
+        return x
+
 # super simple bigram model
 class BigramLanguageModel(nn.Module):
 
@@ -88,6 +170,13 @@ class BigramLanguageModel(nn.Module):
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         # position embedding
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.blocks = nn.Sequential(
+            Block(n_embd, n_head = 4),
+            Block(n_embd, n_head = 4),
+            Block(n_embd, n_head = 4),
+            Block(n_embd, n_head = 4),
+            nn.LayerNorm(n_embd),
+        )
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, idx, targets=None):
@@ -121,6 +210,9 @@ class BigramLanguageModel(nn.Module):
         """
         pos_emb = self.position_embedding_table(torch.arange(T, device = device)) # (T,n_embd) == (T, C)
         x = tok_emb + pos_emb  # (B,T,C)
+        x = self.blocks(x) # (B,T,C)
+        # x = self.sa_head(x) apply one head of self-attention. (B,T,C)
+        # x = self.ffwd(x) (B,T,C)
         logits = self.lm_head(x) # (B,T,vocab_size)
         # B : batch size
         # T : Time -> block size
@@ -129,21 +221,24 @@ class BigramLanguageModel(nn.Module):
         if targets is None:
             loss = None
         else:
-            B, T, C = logits.shape
-            logits = logits.view(B * T, C)  # 2 dimensional
-            targets = targets.view(B * T)  # 1 dimensional
+            B,T,C = logits.shape
+            logits = logits.view(B*T, C)  # 2 dimensional
+            targets = targets.view(B*T)  # 1 dimensional
             loss = F.cross_entropy(logits, targets)  # negative log likelihood
         return logits, loss
 
     def generate(self, idx, max_new_tokens):
         # idx is (B,T) array of indices in the current context
         for _ in range(max_new_tokens):
+            # crop idx to the last block_size tokens
+            idx_cond = idx[:, -block_size:] # ':' means 'select all', in this cases 'B' will selected.
+                                            # -block_size means '뒤에서부터 block_size'번째 위치의 토큰부터 끝까지 선택
             # get the predictions
             # self(idx)는 뭘까?
             # nn.Module을 상속받았기에, 자동으로 __call__ 메서드를 갖으며,
             # forward 메서드로 연결된다.
             # 즉, self(idx) == self.forward(idx)
-            logits, loss = self(idx)
+            logits, loss = self(idx_cond)
             # focus only on the last time step,
             # we pluck out last element at the time dimension
             logits = logits[:, -1, :]  # becomes (B,C)
