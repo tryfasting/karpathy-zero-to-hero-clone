@@ -1,7 +1,7 @@
 [project]
-name = "build-makemore"
+name = "zero-to-hero-clone-by-hand"
 version = "0.1.0"
-description = "Add your description here"
+description = "zero-to-hero-clone-by-hand"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -10,6 +10,7 @@ dependencies = [
     "matplotlib>=3.10.1",
     "regex>=2024.11.6",
     "scipy>=1.15.3",
+    "tiktoken>=0.9.0",
 ]
 
 [project.optional-dependencies]
