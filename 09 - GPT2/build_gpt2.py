@@ -117,6 +117,25 @@ class GPT(nn.Module):
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias = False)
 
+    def forward(self, idx):
+        # idx is of shape (B, T)
+        B, T = idx.size()
+        assert T <= self.config.block_size, f'Cannot forward sequence of length {T}, block size is only {self.config.block_size}'
+        # forward the token and position embeddings
+        pos = torch.arange(0, T, dtype=torch.long, device=idx.device) # shape (T)
+        pos_emb = self.transformer.wpe(pos) # position embeddings of shape (T, n_embd)
+        tok_emb = self.transformer.wte(idx) # token embeddings of shape (B, T, n_embd)
+        x = tok_emb + pos_emb
+        # forward the blocks of the transformer
+        for block in self.transformer.h:
+            x = block(x)
+        # forward the final layernorm and the classifier
+        x = self.transformer.ln_f(x)
+        logits = self.lm_head(x) # (B, T, vocab_size)
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
+        return logits, loss
 
     @classmethod
     def from_pretrained(cls, model_type):
@@ -138,6 +157,8 @@ class GPT(nn.Module):
         # create a from-scratch initialized minGPT model
         config = GPTConfig(**config_args)
         model = GPT(config)
+        # .state_dict() : 모델의 각 layer의 parameter(가중치와 편향등)가 매핑된 dictionary.
+                        # Pytorch로 모델을 저장하거나 불러오고 싶을 때 사용한다.
         sd = model.state_dict()
         sd_keys = sd.keys()
         sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')] # discard this mask / buffer, not a param
@@ -154,12 +175,21 @@ class GPT(nn.Module):
         # basically the openai checkpoints use a "Conv1D" module, but we only want to use a vanilla Linear
         # this means that we have to transpose these weights when we import them
         assert len(sd_keys_hf) == len(sd_keys), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"
+        # huggingface 모델의 각 key에 대해서 다음과 같이 반복한다.
         for k in sd_keys_hf:
+            # 현재 키가 전치가 필요한 가중치인지 확인한다
+            # any : 인자로 넘어온 자료구조 내의 하나의 요소라도 참이면 True, 모두 거짓이라면 False
+                # key가 transposed에 속한 것으로 endswith한다면,
             if any(k.endswith(w) for w in transposed):
                 # special treatment for the Conv1D weights we need to transpose
+                # sd_hf[k]를 전치했을 때의 shape와 sd[k]의 shape가 같은지 확인하고, 아니라면 AssertError 뱉는다.
                 assert sd_hf[k].shape[::-1] == sd[k].shape
+                # gradient 계산을 비활성화한 상태에서
                 with torch.no_grad():
+                    # sd_hf[k].t() : 전치한 상태
+                    # sd[k]에 위의 값을 복사한다.
                     sd[k].copy_(sd_hf[k].t())
+            # 전치가 필요없다면, 단순 그대로 복사한다.
             else:
                 # vanilla copy over the other parameters
                 assert sd_hf[k].shape == sd[k].shape
