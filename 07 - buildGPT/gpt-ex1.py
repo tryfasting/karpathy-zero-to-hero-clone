@@ -29,7 +29,7 @@ torch.manual_seed(1337)
 
 # wget 'https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt'
 # read it in to inspect it
-with open('input.txt', mode='r', encoding='utf-8') as f:
+with open('../data/input.txt', mode='r', encoding='utf-8') as f:
     text = f.read()
 
 # here are all the unique characters that occur in this text
