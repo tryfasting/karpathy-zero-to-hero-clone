@@ -201,14 +201,27 @@ class GPT(nn.Module):
         return model
 
 # ---------------------------------------------------------------------------------------------------------------------
+# attempt to autodetect the device
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 num_return_sequences = 5
 max_length = 30
 
+# get a data batch
+import tiktoken
+enc = tiktoken.get_encoding('gpt2')
+with open('..\\data\\input.txt','r') as f:
+    text = f.read()
+text = text[:1000]
+tokens = enc.encode(text)
+B, T = 4, 32
+buf = torch.tensor(tokens[:B*T + 1])
+x = buf[:-1].view(B, T)
+y = buf[1:].view(B, T)
+
 # model = GPT.from_pretrained('gpt2')
 model = GPT(GPTConfig())
 model.eval()
-device = "cuda" if torch.cuda.is_available() else "cpu"
 model.to(device)
 
 # prefix tokens
