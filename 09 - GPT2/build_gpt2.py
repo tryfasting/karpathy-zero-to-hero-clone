@@ -264,6 +264,9 @@ class DataLoaderLite:
 
 # ---------------------------------------------------------------------------------------------------------------------
 # attempt to autodetect the device
+import time
+
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 num_return_sequences = 5
@@ -274,7 +277,7 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
 
 # get a data batch
-train_loader = DataLoaderLite(4, 32)
+train_loader = DataLoaderLite(16, 1024)
 
 # get logits
 model = GPT(GPTConfig())
@@ -283,6 +286,7 @@ model.to(device)
 # optimize
 optimizer = torch.optim.AdamW(model.parameters(),lr=3e-4)
 for i in range(50):
+    t0 = time.time()
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     optimizer.zero_grad()
@@ -290,7 +294,16 @@ for i in range(50):
     # import code; code.interact(local=locals())
     loss.backward()
     optimizer.step() # update the parameter to derease the loss
-    print(f'step {i}, loss: {loss.item()}')
+
+    ''' 
+    GPU의 비동기 연산 때문에 필요한 코드, 
+    CPU가 GPU에서 진행 중인 모든 작업이 완료될 때까지 기다리도록 만드는 명령어이다.
+    '''
+    # torch.cuda.synchronize()
+
+    t1 = time.time()
+    dt = (t1 - t0)*1000 # time difference in miliseconds
+    print(f'step {i}, loss: {loss.item()}, dt: {df:.2f}ms')
 
 import sys; sys.exit(0)
 
