@@ -277,7 +277,10 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
 
 # get a data batch
-train_loader = DataLoaderLite(16, 1024)
+train_loader = DataLoaderLite(4, 1024)
+
+# Sets the internal precision of float32 matrix multiplications
+torch.set_float32_matmul_precision('high')
 
 # get logits
 model = GPT(GPTConfig())
@@ -303,6 +306,7 @@ for i in range(50):
 
     t1 = time.time()
     dt = (t1 - t0)*1000 # time difference in miliseconds
+    tokens_per_sec = (train_loader.B * train_loader.T) / (t1 - t0)
     print(f'step {i}, loss: {loss.item()}, dt: {df:.2f}ms')
 
 import sys; sys.exit(0)
