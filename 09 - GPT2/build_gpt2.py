@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-# 2:15:08
+# 2:15:08 보던 중,
+# 139:40 복습 중이었다. torch.set_float32_matmul_precision이 뭐지?
 
 # ----------------------------------------------------------------------------------------------------------------------
 class CausalSelfAttention(nn.Module):
