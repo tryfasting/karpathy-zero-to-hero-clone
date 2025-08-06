@@ -4,9 +4,6 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-# 2:15:08 보던 중,
-# 139:40 복습 중이었다. torch.set_float32_matmul_precision이 뭐지?
-
 # ----------------------------------------------------------------------------------------------------------------------
 class CausalSelfAttention(nn.Module):
 
@@ -286,7 +283,7 @@ if torch.cuda.is_available():
 train_loader = DataLoaderLite(4, 1024)
 
 # Sets the internal precision of float32 matrix multiplications
-torch.set_float32_matmul_precision('high')
+torch.set_float32_matmul_precision('medium')
 
 # get logits
 # override vocab_size number, make it much prettier
