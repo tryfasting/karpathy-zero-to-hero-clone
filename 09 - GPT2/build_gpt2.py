@@ -266,7 +266,6 @@ class DataLoaderLite:
 # attempt to autodetect the device
 import time
 
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 num_return_sequences = 5
@@ -277,7 +276,7 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
 
 # get a data batch
-train_loader = DataLoaderLite(4, 1024)
+train_loader = DataLoaderLite(8, 64)
 
 # Sets the internal precision of float32 matrix multiplications
 torch.set_float32_matmul_precision('high')
@@ -307,53 +306,10 @@ for i in range(50):
     t1 = time.time()
     dt = (t1 - t0)*1000 # time difference in miliseconds
     tokens_per_sec = (train_loader.B * train_loader.T) / (t1 - t0)
-    print(f'step {i}, loss: {loss.item()}, dt: {df:.2f}ms')
+    print(f'step {i}, loss: {loss.item()}, dt: {dt:.2f}ms')
 
-import sys; sys.exit(0)
 
-'''
-enc = tiktoken.get_encoding('gpt2')
-tokens = enc.encode("Hello, I'm a language model,")
-tokens = torch.tensor(tokens, dtype = torch.long) # (8,)
-tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1) # (5, 8)
-x = tokens.to(device)
 
-# generate! right now x is (B, T) where B = 5, T = 8
-# set the seed to 42
-torch.manual_seed(42)
-torch.cuda.manual_seed(42)
-while x.size(1) < max_length:
-    # forward the model to get the logits
-    with torch.no_grad():
-        logits = model(x) # (B, T, vocab_size)
-        # take the logits at the last position
-        logits = logits[:,-1,:] # (B, vocab_size)
-        # get the probabilities
-        probs = F.softmax(logits, dim= -1)
-        # do top-k sampling of 50 (huggingface pipeline default)
-        # topl_probs here become (5, 50), topk_indices is (5, 50)
-        # 확률이 가장 높은 상위 50개의 단어만 후보로 샘플링한다.
-        # topk_probs : 상위 50개 단어의 확률값
-        # topk_indices : 상위 50개 단어의 원래 인덱스
-        topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
-        # select a token from the top-k probabilities
-        # output : ix값은 0부터 49 사이의 정수이다. topk_indices내에서의 상대적인 위치를 뜻한다.
-        ix = torch.multinomial(topk_probs,1) # (B, 1)
-        # gather the corresponding indices
-        # torch.gather는 ix를 사용해 topk_indices에서 실제 값을 가져온다.
-        # 예를 들어, 첫 번째 배치에서 ix가 [10]이라면, topk_indices의 첫 번째 행에서 10번째 원소를 가져온다.
-        # 그 원소는 바로 전체 어휘사전(vocab)에서의 실제 토큰 ID이다.
-        xcol = torch.gather(topk_indices, -1, ix) # (B, 1)
-
-        # append to the sequence
-        x = torch.cat((x, xcol), dim=1)
-
-# print the generated text
-for i in range(num_return_sequences):
-    tokens = x[i, :max_length].tolist()
-    decoded = enc.decode(tokens)
-    print('>', decoded)
-'''
 
 
 
