@@ -47,11 +47,15 @@ class CausalSelfAttention(nn.Module):
 
         # q                   : (B, nh, T, hs)
         # k.transpose(-2, -1) : (B, nh, hs, T)
-        att = (q @ k.transpose(-2,-1)) * (1.0 / math.sqrt(k.size(-1))) # (B, nh, T,  T)
 
-        att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
-        att = F.softmax(att, dim=-1)
-        y = att @ v # (B, nh, T, T) x (B, nh, T, hs)
+        # att = (q @ k.transpose(-2,-1)) * (1.0 / math.sqrt(k.size(-1))) # (B, nh, T,  T)
+        # att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
+        # att = F.softmax(att, dim=-1)
+        # y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+
+        ## flash attention
+        y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection
@@ -276,14 +280,16 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
 
 # get a data batch
-train_loader = DataLoaderLite(8, 64)
+train_loader = DataLoaderLite(4, 1024)
 
 # Sets the internal precision of float32 matrix multiplications
-torch.set_float32_matmul_precision('high')
+torch.set_float32_matmul_precision('medium')
 
 # get logits
-model = GPT(GPTConfig())
+# override vocab_size number, make it much prettier
+model = GPT(GPTConfig(vocab_size = 50304))
 model.to(device)
+model = torch.compile(model)
 
 # optimize
 optimizer = torch.optim.AdamW(model.parameters(),lr=3e-4)
@@ -292,25 +298,27 @@ for i in range(50):
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     optimizer.zero_grad()
-    logits, loss = model(x,y)
-    # import code; code.interact(local=locals())
+    # Enables autocasting for the forward pass
+    with torch.autocast(device_type=device, dtype=torch.bfloat16):
+        # Forward pass with BF16
+        logits, loss = model(x, y)
+        # import code; code.interact(local=locals())
+    # Backward pass with Loss Scaling and BF16, and convert into FP32
     loss.backward()
-    optimizer.step() # update the parameter to derease the loss
+    # update the parameter to derease the loss, FP32
+    optimizer.step()
 
     ''' 
     GPU의 비동기 연산 때문에 필요한 코드, 
     CPU가 GPU에서 진행 중인 모든 작업이 완료될 때까지 기다리도록 만드는 명령어이다.
     '''
-    # torch.cuda.synchronize()
-
+    torch.cuda.synchronize()
     t1 = time.time()
     dt = (t1 - t0)*1000 # time difference in miliseconds
     tokens_per_sec = (train_loader.B * train_loader.T) / (t1 - t0)
-    print(f'step {i}, loss: {loss.item()}, dt: {dt:.2f}ms')
+    print(f'step {i}, loss: {loss.item()}, dt: {dt:.2f}ms, tok/sec: {tokens_per_sec:.2f}')
 
-
-
-
+import sys; sys.exit(0)
 
 
 
