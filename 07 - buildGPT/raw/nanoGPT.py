@@ -1,4 +1,7 @@
 """
+karphathy가 구현한 nanoGPT.py
+참고용으로 가져옴
+
 Full definition of a GPT Language Model, all of it in this single file.
 References:
 1) the official GPT-2 TensorFlow implementation released by OpenAI:
